@@ -50,11 +50,11 @@ options:
         - Organization that should own the credential.
       required: False
       default: null
-    kind:
+    credential_type:
       description:
         - Type of credential being added.
       required: True
-      choices: ["ssh", "net", "scm", "aws", "rax", "vmware", "satellite6", "cloudforms", "gce", "azure", "azure_rm", "openstack"]
+      default: null
     host:
       description:
         - Host for this credential.
@@ -172,9 +172,7 @@ def main():
         name=dict(required=True),
         user=dict(),
         team=dict(),
-        kind=dict(required=True,
-                  choices=["ssh", "net", "scm", "aws", "rax", "vmware", "satellite6",
-                           "cloudforms", "gce", "azure", "azure_rm", "openstack"]),
+        credential_type=dict(required=True),
         host=dict(),
         username=dict(),
         password=dict(no_log=True),
@@ -204,6 +202,9 @@ def main():
 
     name = module.params.get('name')
     organization = module.params.get('organization')
+    team = module.params.get('team')
+    user = module.params.get('user')
+    credential_type = module.params.get('credential_type')
     state = module.params.get('state')
 
     json_output = {'credential': name, 'state': state}
@@ -221,6 +222,21 @@ def main():
                 org = org_res.get(name=organization)
                 params['organization'] = org['id']
 
+            if team:
+                tm_res = tower_cli.get_resource('team')
+                tm = tm_res.get(name=team)
+                params['team'] = tm['id']
+
+            if user:
+                usr_res = tower_cli.get_resource('user')
+                usr = usr_res.get(name=user)
+                params['user'] = usr['id']
+
+            if credential_type:
+                credtype_res = tower_cli.get_resource('credential_type')
+                credtype = credtype_res.get(name=credential_type)
+                params['credential_type'] = credtype['id']
+
             if params['ssh_key_data']:
                 filename = params['ssh_key_data']
                 if not os.path.exists(filename):
@@ -229,6 +245,9 @@ def main():
                     module.fail_json(msg='attempted to read contents of directory: %s' % filename)
                 with open(filename, 'rb') as f:
                     params['ssh_key_data'] = f.read()
+
+            inputs = dict((k, v) for k, v in params.items() if k in ['username', 'password', 'ssh_key_data', 'ssh_key_unlock'])
+            params['inputs'] = inputs
 
             if state == 'present':
                 result = credential.modify(**params)
